@@ -1,0 +1,568 @@
+<html>
+<head>
+    <script src="../../src/astro.js"></script>
+    <style>
+
+        .ae-mainscreen {
+            border: solid 1px;
+        }
+
+    </style>
+</head>
+<body>
+    <canvas class="ae-mainscreen" id="screen"></canvas>
+    <div class="ae-debug" id="debug"></div>
+
+<script>
+
+
+var gl = {
+
+    // Assets
+    //
+    a : {
+        backdrop : "assets/darkPurple.png",
+        player1  : "assets/playerShip1_blue.png",
+        asteroid : "assets/meteorBrown_big1.png",
+        laser    : "assets/laserBlue01.png",
+        fire_f1  : "assets/fire01.png",
+        fire_f2  : "assets/fire02.png",
+        fire_f3  : "assets/fire03.png",
+        star_f1  : "assets/star1.png",
+        star_f2  : "assets/star2.png",
+        star_f3  : "assets/star3.png",
+        star_f4  : "assets/star2.png",
+        star_f5  : "assets/star1.png",
+    },
+
+    // Game controller for a lavel
+    //
+    c : undefined,
+
+    // Game control
+    //
+    run : function () {
+        "use strict";
+
+        var areaX = window.innerWidth - 30,
+            areaY = window.innerHeight - 50,
+            config = {
+                screenWidth   : areaX,
+                screenHeight  : areaY,
+                backdrop      : gl.a.backdrop,
+                eventHandler  : gl.eventHandler
+            };
+
+        var runLevel = function (asteroids, ast_range_from, ast_range_to, callback) {
+
+            // Create the main controller
+
+            config.stopHandler = callback;
+
+            // Reset player state
+
+            gl.playerState.orientation  = 0;
+            gl.playerState.acceleration = 0;
+            gl.playerState.boom = false;
+
+            // Start the main controller
+
+            gl.c = new ae.MainController("screen", config, "debug");
+            gl.c.start(gl.playerState);
+
+            // Create initial asteroids
+
+            for (var i=0; i<asteroids; i++) {
+                
+                var dim = (ast_range_to - ast_range_from) 
+                    * Math.random() + ast_range_from;
+                
+                gl.c.addSprite(new gl.Asteroid("asteroid"+ i,
+                    (areaX - 100) * Math.random() + 100, areaY * Math.random(),
+                    dim, 5*i, 20));
+            }
+        }
+
+        // Show initial title screen
+
+        gl.createScreen("screen", function (ctx) {
+
+            ctx.font = "30px Arial";
+            ctx.textAlign = "center";
+            ctx.fillStyle = "yellow";
+            ctx.fillText("<name goes here>", areaX/2, areaY/3);
+            ctx.fillText("Press Space", areaX/2, areaY*2/3);
+
+        }, undefined, function () {
+            
+            // Initial title screen was passed
+
+            console.log("Level 1 start");
+            runLevel(5, 40, 40, function () {
+                console.log("Level 1 finished");
+
+                console.log("Level 2 start");
+                runLevel(20, 20, 60, function () {
+                    console.log("Level 2 finished");
+                });
+            });            
+        });
+    },
+
+    createScreen : function (screen_id, draw, keyHandler, callback) {
+        "use strict";
+
+        var areaX = window.innerWidth - 30,
+            areaY = window.innerHeight - 50,
+            screen, ctx;
+
+        // Get the canvas
+
+        screen = ae.$(screen_id);
+
+        // Set dimensions
+
+        screen.width  = areaX;
+        screen.height = areaY;
+        screen.style.width  = areaX + "px";
+        screen.style.height = areaY + "px";
+
+        // Get the canvas context and start drawing
+
+        ctx = screen.getContext("2d");
+        
+        ctx.drawImage(gl.a.backdrop,
+            0, 0, areaX, areaY);
+        
+        draw(ctx);
+        
+        document.onkeydown = function (e) {
+
+            if (keyHandler !== undefined) {
+                keyHandler(e);
+            }
+
+            if (e.keyCode == 32) {
+                document.onkeydown = null;
+                callback();
+            }
+
+        }.bind(this);
+        
+    },
+
+    // Event handlers for the game
+    //
+    eventHandler : {
+
+        onkeydown : function(state, e) {
+            "use strict";
+
+            e = e || window.event;
+
+            if (state.player.boom) {
+
+                // No more control when we are exploding
+
+                return;
+            }
+
+            if (e.keyCode == 32) {
+
+                var sx = state.player.x + Math.cos(state.player.orientation) * 20,
+                    sy = state.player.y + Math.sin(state.player.orientation) * 20;
+
+                gl.c.addSprite({
+                    id     : "shot",
+                    sprite : "laser",
+                    x      : sx,
+                    y      : sy,
+                    dim    : 10,
+                    rot    : state.player.orientation,
+                    speed  : 200,
+                    displayLoop : false,
+                    collision : function (self) {
+                        "use strict";
+
+                        // A shot is always removed after a collision
+
+                        gl.c.removeSprite(self);
+                    },
+                    draw : function (ctx, state) {
+                        "use strict";
+                        ctx.save();
+                        ctx.translate(state.x, state.y);
+                        ctx.rotate(state.rot+Math.PI/2);
+                        ctx.drawImage(gl.a[state.sprite],
+                            0-state.dim/2, 0-state.dim/2,
+                            state.dim, state.dim);
+                        ctx.restore();
+                    },
+
+                });
+            }
+
+            switch (e.keyCode) {
+
+                case 38: state.player.acceleration +=  0.5; break; // Move forward
+                case 40: state.player.acceleration += -0.5; break; // Move backward
+                case 39:
+                    if (e.ctrlKey || e.shiftKey) {
+                        state.player.strafe =  1; // Strafe right
+                    } else {
+                        state.player.dir =  1;    // Rotate right
+                        if (state.player.rotSpeed < state.player.maxRotSpeed) {
+                            state.player.rotSpeed = state.player.deltaRotSpeed(
+                                                        state.player.rotSpeed);
+                        }
+                    }
+                    break;
+
+                case 37:
+                    if (e.ctrlKey || e.shiftKey) {
+                        state.player.strafe = -1; // Strafe left
+                    } else {
+                        state.player.dir = -1;    // Rotate left
+                        if (state.player.rotSpeed < state.player.maxRotSpeed) {
+                            state.player.rotSpeed = state.player.deltaRotSpeed(
+                                                        state.player.rotSpeed);
+                        }
+                    }
+                    break;
+            }
+
+            ae.default_eventHandler.stopBubbleEvent(e);
+        },
+
+        onkeyup : function(state, e) {
+            "use strict";
+
+            e = e || window.event;
+
+            switch (e.keyCode) {
+                case 38: case 40: state.player.acceleration = 0; break; // Stop moving
+                case 37: case 39:
+
+                    // Stop rotating and strafing
+
+                    state.player.dir = 0;
+                    state.player.strafe = 0;
+                    state.player.rotSpeed = state.player.minRotSpeed;
+                    break;
+            }
+
+            ae.default_eventHandler.stopBubbleEvent(e);
+        }
+    },
+
+    playerState : {
+
+        sprite : "player1",
+
+        show_debug   : false,
+
+        orientation  : 0,  // Sprite orientation
+        acceleration : 0,  // Sprite acceleration
+
+        boom : false, // Flag for player death
+
+        // Custom move function to simulate floating in space
+        //
+        move : function (timeCorrection, entity) {
+            "use strict";
+
+            // Calcuate new orientation of the ship
+
+            entity.orientation += timeCorrection * entity.dir * entity.rotSpeed;
+
+            // Calculate current speed vector (velocity vector)
+
+            var vx = Math.cos(entity.rot) * entity.speed,
+                vy = Math.sin(entity.rot) * entity.speed;
+
+            // Calculate orientational speed vector
+
+            var ox = Math.cos(entity.orientation) * entity.acceleration,
+                oy = Math.sin(entity.orientation) * entity.acceleration;
+
+            // Add both vectors to get the new move vector
+
+            var mx = vx + ox,
+                my = vy + oy;
+
+            // Apply the new move vector in polar form
+
+            entity.speed = Math.sqrt(Math.pow(mx,2) + Math.pow(my,2));
+            entity.rot = Math.atan2(my, mx);
+
+            // Calculate new entity coordinates
+
+            var moveStep = timeCorrection * entity.speed * entity.moveSpeed;
+            var strafeStep = timeCorrection * entity.strafe * entity.moveSpeed * 20;
+
+            // Caclulate new position based on forward / backward movement
+
+            var newX = entity.x + Math.cos(entity.rot) * moveStep;
+            var newY = entity.y + Math.sin(entity.rot) * moveStep;
+
+            // Factor in left / right strafe movement
+
+            newX -= Math.sin(entity.orientation) * strafeStep;
+            newY += Math.cos(entity.orientation) * strafeStep;
+
+            // Set the new position
+
+            entity.x = newX;
+            entity.y = newY;
+        },
+
+        // Custom draw function so the ship can rotate and fly in a different
+        // direction
+        //
+        draw : function (ctx, state) {
+            "use strict";
+
+            if (state.show_debug) {
+                ctx.beginPath();
+                ctx.arc(state.x, state.y, state.dim/2, 0, 2 * Math.PI);
+
+                ctx.moveTo(state.x, state.y);
+                ctx.lineTo(
+                    (state.x + Math.cos(state.orientation) * 20),
+                    (state.y + Math.sin(state.orientation) * 20)
+                );
+                ctx.closePath();
+
+                ctx.stroke();
+
+                var oldStrokeStyle = ctx.strokeStyle
+                var dimHalf = state.dim / 2;
+
+                ctx.strokeStyle = "blue";
+                ctx.rect(state.x - dimHalf, state.y - dimHalf, state.dim, state.dim);
+                ctx.stroke();
+                ctx.strokeStyle = oldStrokeStyle;
+
+            } else {
+
+                ctx.save();
+                ctx.translate(state.x, state.y);
+                ctx.rotate(state.orientation+Math.PI/2);
+
+                if (state.boom) {
+                    var starSprite = "star_f"+ (gl.c.frame % 5 + 1);
+                        ctx.drawImage(gl.a[starSprite],
+                            0-state.dim/2, 0-state.dim/2,
+                            state.dim, state.dim);
+                } else {
+                    ctx.drawImage(gl.a[state.sprite],
+                        0-state.dim/2, 0-state.dim/2,
+                        state.dim, state.dim);
+
+                    if (state.acceleration > 0) {
+                        var fireSprite = "fire_f"+ (gl.c.frame % 3 + 1);
+                        ctx.drawImage(gl.a[fireSprite],
+                            0-state.dim/2, 0+state.dim/2,
+                            state.dim, state.dim);
+                    }
+                }
+
+                ctx.restore();
+            }
+        },
+
+        collision : function (self, entity) {
+            "use strict";
+
+            if (!self.boom) {
+                self.boom = true;
+
+                // Let the simulation run for some time then stop it
+                // and inform the player that they have LOST!
+
+                window.setTimeout(function () {
+                    gl.c.stop();
+                }, 800);
+            }
+        }
+    },
+
+    util : {
+
+        // Iterate over a list.
+        //
+        // list - List to iterate over.
+        // iterator - Function to be called in each step - gets
+        //            the index and element as parameter. If the
+        //            function returns false then the iteration
+        //            ends immediately.
+        //
+        iter : function (list, iterator) {
+            "use strict";
+            for (var i=0;i<list.length;i++) {
+                if (iterator(i, list[i]) === false) {
+                    break;
+                }
+            }
+        },
+
+        // Get a list of keys on an object.
+        // This will ignore "inherited" keys.
+        //
+        oKeys : function (obj) {
+            "use strict";
+            var key, keys = [];
+            for(key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    keys.push(key);
+                }
+            }
+            return keys;
+        }
+    }
+};
+
+// Asteroid sprite
+//
+gl.Asteroid = ae.Class.create({
+
+    id    : "",
+    type  : "asteroid",
+    x     : 0,
+    y     : 0,
+    dim   : 0,
+    rot   : 0,
+    speed : 0,
+    displayLoop : true,
+
+    lastChange : undefined,
+
+    sprite : "asteroid",
+
+    init : function (id, x, y, dim, rot, speed) {
+        "use strict";
+
+        this.id          = id;
+        this.x           = x;
+        this.y           = y;
+        this.dim         = dim;
+        this.rot         = rot;
+        this.speed       = speed;
+        this.displayLoop = true;
+    },
+
+    draw : function (ctx, state) {
+        "use strict";
+
+        if (gl.c.frame % 50 < 2) {
+
+            // Reset last change
+
+            this.lastChange = undefined;
+        }
+
+        ctx.save();
+        ctx.translate(state.x, state.y);
+        ctx.rotate(state.orientation+Math.PI/2);
+        ctx.drawImage(gl.a[state.sprite],
+            0-state.dim/2, 0-state.dim/2,
+            state.dim, state.dim);
+        ctx.restore();
+    },
+
+    // Asteroid collides with something
+    //
+    collision : function (self, entity) {
+        "use strict";
+
+        if (entity.boom) {
+
+            // Exploding entities are ignored
+
+            return;
+        }
+
+        if (entity.type === "asteroid" || entity.id === "player") {
+
+            if (self.lastChange === undefined) {
+
+                // Asteroids just bounce off each other
+
+                self.rot = entity.rot + Math.PI / 2;
+                entity.rot = self.rot + Math.PI / 2;
+
+                // Set last change so we don't change direction constantly
+
+                this.lastChange = gl.c.frame;
+            }
+
+            return
+        }
+
+        var newAsteroid = function (counter) {
+            var rot = counter % 3 * 45, // Field of initial rotation
+                dim = Math.floor(self.dim * 0.5),
+                radius, speed;
+
+            // Add a random angle in the initial field of rotation
+
+            rot += Math.floor(Math.random() * 45);
+
+            // Explosion radius
+
+            radius = 10 + Math.floor(Math.random() * 10);
+
+            // Speed
+
+            speed = 5 + Math.floor(Math.random() * 40);
+
+            return new gl.Asteroid(this.id + "-" + counter,
+                                   self.x + Math.cos(rot) * radius,
+                                    self.y + Math.sin(rot) * radius,
+                                   5 + dim, rot, speed)
+        }.bind(this);
+
+          gl.c.removeSprite(self);
+
+        // Create new smaller asteroids
+
+        if (self.dim > 20) {
+            for (var i=0; i<4; i++) {
+                gl.c.addSprite(newAsteroid(i));
+            }
+        }
+    }
+});
+
+// Startup code
+// ============
+
+// Load assets
+
+var assetList = gl.util.oKeys(gl.a),
+    loadCounter = 0,
+    startFunc = function () {
+        loadCounter++;
+
+        if (loadCounter === assetList.length) {
+
+            // All assets have loaded ... GO!
+
+            gl.run();
+        }
+    };
+
+gl.util.iter(assetList, function (i, item) {
+    "use strict";
+    
+    var im = new Image();
+    
+    im.src = gl.a[item];
+    im.onload = startFunc;
+
+    gl.a[item] = im;
+});
+
+</script>
+</body>
+</html>
