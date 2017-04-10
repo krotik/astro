@@ -6,7 +6,7 @@ JavaScript 2D game engine for asteroid clones. This implementation is not bound 
 
 [Check out the demo ...](https://rawgit.com/krotik/astro/master/examples/game_demo/index.html)
 
-![Screenshot Game Example](https://github.com/krotik/astro/blob/master/examples/game_demo/img/screenshot.png?raw=true)
+![Screenshot Game Example](https://github.com/krotik/astro/blob/master/examples/game_demo/screenshot.png?raw=true)
 
 ## Author
 
